@@ -6,8 +6,8 @@ public class GameRound
     public Guid GameMatchId { get; private set; }
     public int RoundNumber { get; private set; }
 
-    public Guid PlayerA { get; private set; }
-    public Guid PlayerB { get; private set; }
+    public Guid PlayerAId { get; private set; }
+    public Guid PlayerBId { get; private set; }
 
     public int? PlayerAPoints { get; private set; }
     public int? PlayerBPoints { get; private set; }
@@ -21,15 +21,15 @@ public class GameRound
 
     private GameRound() { }
 
-    public static GameRound StartGameRound(Guid gameMatchId, int roundNumber, Guid playerA, Guid playerB)
+    public static GameRound StartGameRound(Guid gameMatchId, int roundNumber, Guid playerAId, Guid playerBId)
     {
         var gameRound = new GameRound()
         {
             Id = Guid.NewGuid(),
             GameMatchId = gameMatchId,
             RoundNumber = roundNumber,
-            PlayerA = playerA,
-            PlayerB = playerB
+            PlayerAId = playerAId,
+            PlayerBId = playerBId
         };
 
         return gameRound;
@@ -68,9 +68,9 @@ public class GameRound
             throw new InvalidOperationException("Round has not ended or points are not calculated.");
 
         if (PlayerAPoints > PlayerBPoints)
-            return PlayerA;
+            return PlayerAId;
         else if (PlayerBPoints > PlayerAPoints)
-            return PlayerB;
+            return PlayerBId;
         else
             return null;
     }
