@@ -9,11 +9,11 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="Location404.Shared.Observability" Version="0.0.4"/>
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\GameCoreEngine.Infrastructure\GameCoreEngine.Infrastructure.csproj" />
-    <ProjectReference Include="..\GameCoreEngine.Presentation\GameCoreEngine.Presentation.csproj" />
     <ProjectReference Include="..\GameCoreEngine.Application\GameCoreEngine.Application.csproj" />
     <ProjectReference Include="..\GameCoreEngine.Domain\GameCoreEngine.Domain.csproj" />
   </ItemGroup>
