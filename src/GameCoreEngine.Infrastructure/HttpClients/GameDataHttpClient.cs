@@ -4,14 +4,9 @@ using GameCoreEngine.Application.Services;
 using GameCoreEngine.Application.DTOs.Integration;
 using System.Net.Http.Json;
 
-public class GameDataHttpClient : IGameDataClient
+public class GameDataHttpClient(HttpClient httpClient) : IGameDataClient
 {
-    private readonly HttpClient _httpClient;
-
-    public GameDataHttpClient(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-    }
+    private readonly HttpClient _httpClient = httpClient;
 
     public async Task<UserDto?> GetUserAsync(Guid userId)
     {

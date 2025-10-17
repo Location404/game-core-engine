@@ -9,19 +9,18 @@ public record RoundEndedResponse(
     CoordinateDto CorrectAnswer,
     CoordinateDto PlayerAGuess,
     CoordinateDto PlayerBGuess,
-    int PlayerAPoints,
-    int PlayerBPoints,
-    int PlayerATotalPoints,
-    int PlayerBTotalPoints,
+    int? PlayerAPoints,
+    int? PlayerBPoints,
+    int? PlayerATotalPoints,
+    int? PlayerBTotalPoints,
     Guid? RoundWinnerId
 )
 {
-    public static RoundEndedResponse FromGameRound(GameRound round, int playerATotalPoints, int playerBTotalPoints)
+    public static RoundEndedResponse FromGameRound(GameRound round, int? playerATotalPoints, int? playerBTotalPoints)
     {
-        if (round.GameResponse == null || round.PlayerAGuess == null || round.PlayerBGuess == null)
-            throw new InvalidOperationException("Round must be ended before creating response.");
-
-        return new RoundEndedResponse(
+        return round.GameResponse == null || round.PlayerAGuess == null || round.PlayerBGuess == null
+            ? throw new InvalidOperationException("Round must be ended before creating response.")
+            : new RoundEndedResponse(
             round.GameMatchId,
             round.Id,
             round.RoundNumber,

@@ -12,9 +12,7 @@ using GameCoreEngine.Infrastructure.HttpClients;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddInfrastructure(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddRedisServices(configuration);
         services.AddMatchmakingServices();
@@ -25,9 +23,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static IServiceCollection AddRedisServices(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    private static IServiceCollection AddRedisServices(this IServiceCollection services, IConfiguration configuration)
     {
         var redisSettings = configuration.GetSection("Redis").Get<RedisSettings>()
             ?? new RedisSettings();
@@ -55,8 +51,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static IServiceCollection AddMatchmakingServices(
-        this IServiceCollection services)
+    private static IServiceCollection AddMatchmakingServices(this IServiceCollection services)
     {
         services.AddSingleton<IMatchmakingService, RedisMatchmakingService>();
         return services;
@@ -65,7 +60,7 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddMessagingServices(
         this IServiceCollection services,
         IConfiguration configuration)
-    {
+    {        
         var rabbitSettings = configuration.GetSection("RabbitMQ").Get<RabbitMQSettings>()
             ?? new RabbitMQSettings();
 
@@ -75,12 +70,9 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static IServiceCollection AddHttpClients(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    private static IServiceCollection AddHttpClients(this IServiceCollection services, IConfiguration configuration)
     {
-        var gameDataSettings = configuration.GetSection("GameDataClient").Get<GameDataClientSettings>()
-            ?? new GameDataClientSettings();
+        var gameDataSettings = configuration.GetSection("GameDataClient").Get<GameDataClientSettings>()  ?? new GameDataClientSettings();
 
         services.AddSingleton(gameDataSettings);
 
@@ -92,11 +84,4 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
-
-    // private static IServiceCollection AddApplicationServices(
-    //     this IServiceCollection services)
-    // {
-    //     services.AddSingleton<IGameResponseGenerator, RandomGameResponseGenerator>();
-    //     return services;
-    // }
 }
