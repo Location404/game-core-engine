@@ -9,8 +9,12 @@ public class Coordinate(int x, int y)
     {
         var deltaX = other.X - X;
         var deltaY = other.Y - Y;
-        var distance = Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
-        
-        return distance;
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
     }
+
+    public override bool Equals(object? obj) => obj is Coordinate other && X == other.X && Y == other.Y;
+
+    public override int GetHashCode() => HashCode.Combine(X, Y);
+
+    public override string ToString() => $"({X}, {Y})";
 }

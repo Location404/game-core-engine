@@ -15,8 +15,8 @@ public class GameMatch
     public int? PlayerATotalPoints { get; private set; }
     public int? PlayerBTotalPoints { get; private set; }
 
-    public int PointsEarned { get; private set; }
-    public int PointsLost { get; private set; }
+    public int? PointsEarned { get; private set; }
+    public int? PointsLost { get; private set; }
 
     public List<GameRound>? GameRounds { get; private set; }
     public GameRound? CurrentGameRound { get; private set; }
@@ -45,19 +45,67 @@ public class GameMatch
             Id = Guid.NewGuid(),
             PlayerAId = playerAId,
             PlayerBId = playerBId,
-            StartTime = DateTime.UtcNow
+            StartTime = DateTime.UtcNow,
+
+            PlayerATotalPoints = 0,
+            PlayerBTotalPoints = 0,
         };
 
         return gameMatch;
     }
 
-    public void EndGameMatch(Guid playerWinnerId, Guid playerLoserId, int pointsEarned, int pointsLost)
+    public void EndGameMatch()
     {
-        PlayerWinnerId = playerWinnerId;
-        PlayerLoserId = playerLoserId;
-        PointsEarned = pointsEarned;
-        PointsLost = pointsLost;
+        if (PlayerATotalPoints > PlayerBTotalPoints)
+        {
+            PlayerWinnerId = PlayerAId;
+            PlayerLoserId = PlayerBId;
+            PointsEarned = CalculatePointsEarned(PlayerATotalPoints, PlayerBTotalPoints);
+            PointsLost = CalculatePointsLost(PlayerATotalPoints, PlayerBTotalPoints);
+        }
+        else if (PlayerBTotalPoints > PlayerATotalPoints)
+        {
+            PlayerWinnerId = PlayerBId;
+            PlayerLoserId = PlayerAId;
+            PointsEarned = CalculatePointsEarned(PlayerBTotalPoints, PlayerATotalPoints);
+            PointsLost = CalculatePointsLost(PlayerBTotalPoints, PlayerATotalPoints);
+        }
+
         EndTime = DateTime.UtcNow;
+    }
+    
+
+    private int CalculatePointsEarned(int? winnerPoints, int? loserPoints)
+    {
+        if (winnerPoints == null || loserPoints == null)
+            throw new InvalidOperationException("Points are not calculated.");
+
+        var pointDifference = winnerPoints.Value - loserPoints.Value;
+
+        if (pointDifference >= 20)
+            return 100;
+        else if (pointDifference >= 10)
+            return 75;
+        else if (pointDifference >= 0)
+            return 50;
+        else
+            return 30;
+    }
+    private int CalculatePointsLost(int? winnerPoints, int? loserPoints)
+    {
+        if (winnerPoints == null || loserPoints == null)
+            throw new InvalidOperationException("Points are not calculated.");
+
+        var pointDifference = winnerPoints.Value - loserPoints.Value;
+
+        if (pointDifference >= 20)
+            return 30;
+        else if (pointDifference >= 10)
+            return 50;
+        else if (pointDifference >= 0)
+            return 75;
+        else
+            return 100;
     }
 
     public void StartNewGameRound()

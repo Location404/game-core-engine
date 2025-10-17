@@ -10,7 +10,7 @@ public class User
     public List<GameMatch> HistoryGameMatch { get; private set; } = [];
     public GameMatch? CurrentGameMatch { get; private set; }
     public int TotalPoints { get; private set; }
-    
+
     public bool[] HistoryGameResults => SearchHistoryGameResults();
     public bool IsInGameMatch() => CurrentGameMatch != null;
 
@@ -20,7 +20,6 @@ public class User
         Username = username;
         Email = email;
         ProfileImage = profileImage;
-        TotalPoints = 0;
         HistoryGameMatch = historyGameMatch ?? [];
         CurrentGameMatch = currentGameMatch;
         TotalPoints = totalPoints;
