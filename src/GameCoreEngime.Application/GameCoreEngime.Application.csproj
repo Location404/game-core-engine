@@ -6,4 +6,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../GameCoreEngime.Domain/GameCoreEngime.Domain.csproj" />
+  </ItemGroup>
+
 </Project>
