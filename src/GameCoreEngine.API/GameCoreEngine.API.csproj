@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GameCoreEngine.Infrastructure\GameCoreEngine.Infrastructure.csproj" />
+    <ProjectReference Include="..\GameCoreEngine.Presentation\GameCoreEngine.Presentation.csproj" />
+    <ProjectReference Include="..\GameCoreEngine.Application\GameCoreEngine.Application.csproj" />
+    <ProjectReference Include="..\GameCoreEngine.Domain\GameCoreEngine.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
