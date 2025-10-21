@@ -32,13 +32,13 @@ public class GuessStorageManager : IGuessStorageManager
         if (guessA.HasValue)
         {
             var parts = guessA.ToString().Split(',');
-            coordA = new Coordinate(int.Parse(parts[0]), int.Parse(parts[1]));
+            coordA = new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
         }
 
         if (guessB.HasValue)
         {
             var parts = guessB.ToString().Split(',');
-            coordB = new Coordinate(int.Parse(parts[0]), int.Parse(parts[1]));
+            coordB = new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
         }
 
         return (coordA, coordB);
@@ -47,13 +47,36 @@ public class GuessStorageManager : IGuessStorageManager
     public async Task ClearGuessesAsync(Guid matchId, Guid roundId)
     {
         var pattern = $"guess:{matchId}:{roundId}:*";
-        
+
         var server = _db.Multiplexer.GetServer(_db.Multiplexer.GetEndPoints().First());
         var keys = server.Keys(pattern: pattern).ToArray();
-        
+
         if (keys.Length > 0)
         {
             await _db.KeyDeleteAsync(keys);
         }
+
+        // Also remove correct answer
+        var answerKey = $"answer:{matchId}:{roundId}";
+        await _db.KeyDeleteAsync(answerKey);
+    }
+
+    public async Task StoreCorrectAnswerAsync(Guid matchId, Guid roundId, Coordinate correctAnswer)
+    {
+        var key = $"answer:{matchId}:{roundId}";
+        var value = $"{correctAnswer.X},{correctAnswer.Y}";
+        await _db.StringSetAsync(key, value, TimeSpan.FromMinutes(5));
+    }
+
+    public async Task<Coordinate?> GetCorrectAnswerAsync(Guid matchId, Guid roundId)
+    {
+        var key = $"answer:{matchId}:{roundId}";
+        var answer = await _db.StringGetAsync(key);
+
+        if (!answer.HasValue)
+            return null;
+
+        var parts = answer.ToString().Split(',');
+        return new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
     }
 }

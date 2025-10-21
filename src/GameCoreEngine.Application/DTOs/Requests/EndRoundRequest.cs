@@ -4,14 +4,14 @@ namespace GameCoreEngine.Application.DTOs.Requests;
 
 public record EndRoundRequest(
     Guid MatchId,
-    int ResponseX,
-    int ResponseY,
+    double ResponseX,
+    double ResponseY,
     Guid PlayerAId,
-    int PlayerAGuessX,
-    int PlayerAGuessY,
+    double PlayerAGuessX,
+    double PlayerAGuessY,
     Guid PlayerBId,
-    int PlayerBGuessX,
-    int PlayerBGuessY
+    double PlayerBGuessX,
+    double PlayerBGuessY
 )
 {
     public Coordinate GetGameResponse() => new(ResponseX, ResponseY);

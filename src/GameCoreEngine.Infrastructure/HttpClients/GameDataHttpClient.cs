@@ -13,11 +13,10 @@ public class GameDataHttpClient(HttpClient httpClient) : IGameDataClient
         try
         {
             var response = await _httpClient.GetAsync($"/api/users/{userId}");
-            
-            if (!response.IsSuccessStatusCode)
-                return null;
 
-            return await response.Content.ReadFromJsonAsync<UserDto>();
+            return !response.IsSuccessStatusCode 
+                ? null 
+                : await response.Content.ReadFromJsonAsync<UserDto>();
         }
         catch (HttpRequestException)
         {

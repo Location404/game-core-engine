@@ -41,6 +41,7 @@ public class RedisMatchmakingService(IConnectionMultiplexer redis, IGameMatchMan
     {
         await _matchmakingLock.WaitAsync();
         
+        
         try
         {
             var players = await _db.SortedSetRangeByRankAsync(QueueKey, 0, 1);

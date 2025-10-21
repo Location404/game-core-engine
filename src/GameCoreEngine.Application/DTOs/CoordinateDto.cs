@@ -3,7 +3,7 @@ using GameCoreEngine.Domain.Entities;
 
 namespace GameCoreEngine.Application.DTOs;
 
-public record CoordinateDto(int X, int Y)
+public record CoordinateDto(double X, double Y)
 {
     public static CoordinateDto FromEntity(Coordinate coordinate)
         => new(coordinate.X, coordinate.Y);
