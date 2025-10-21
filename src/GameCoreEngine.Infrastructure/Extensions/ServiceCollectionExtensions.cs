@@ -35,16 +35,34 @@ public static class ServiceCollectionExtensions
             // Use real Redis implementations
             services.AddSingleton<IConnectionMultiplexer>(sp =>
             {
-                var configurationOptions = ConfigurationOptions.Parse(redisSettings.ConnectionString);
+                var logger = sp.GetRequiredService<ILogger<IConnectionMultiplexer>>();
 
-                configurationOptions.AbortOnConnectFail = false;
-                configurationOptions.ConnectTimeout = 5000;
-                configurationOptions.SyncTimeout = 5000;
-                configurationOptions.AsyncTimeout = 5000;
-                configurationOptions.ConnectRetry = 3;
-                configurationOptions.KeepAlive = 60;
+                try
+                {
+                    var configurationOptions = ConfigurationOptions.Parse(redisSettings.ConnectionString);
 
-                return ConnectionMultiplexer.Connect(configurationOptions);
+                    configurationOptions.AbortOnConnectFail = false;
+                    configurationOptions.ConnectTimeout = 5000;
+                    configurationOptions.SyncTimeout = 5000;
+                    configurationOptions.AsyncTimeout = 5000;
+                    configurationOptions.ConnectRetry = 3;
+                    configurationOptions.KeepAlive = 60;
+
+                    // Dragonfly compatibility settings
+                    configurationOptions.AllowAdmin = false;
+                    configurationOptions.DefaultDatabase = 0;
+
+                    logger.LogInformation("Connecting to Redis/Dragonfly at: {Endpoint}",
+                        string.Join(", ", configurationOptions.EndPoints));
+
+                    return ConnectionMultiplexer.Connect(configurationOptions);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "Failed to connect to Redis/Dragonfly. Check connection string format: {ConnectionString}",
+                        redisSettings.ConnectionString);
+                    throw;
+                }
             });
 
             services.AddSingleton<IGameMatchManager, RedisGameMatchManager>();
