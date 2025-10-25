@@ -146,6 +146,13 @@ public class RedisGameMatchManager : IGameMatchManager
             .Select(id => id!.Value);
     }
 
+    public async Task ClearPlayerMatchStateAsync(Guid playerId)
+    {
+        _logger.LogInformation("Clearing match state for player {PlayerId}", playerId);
+        await _db.KeyDeleteAsync(GetPlayerMatchKey(playerId));
+        _logger.LogInformation("Player {PlayerId} match state cleared", playerId);
+    }
+
     private async Task SaveMatchAsync(GameMatch match)
     {
         var key = GetMatchKey(match.Id);

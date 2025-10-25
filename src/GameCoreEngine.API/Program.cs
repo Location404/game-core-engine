@@ -31,8 +31,16 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// CORS must be configured before endpoints
+app.UseCors("AllowFrontend");
+
+// Only use HTTPS redirection in production
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
 app.MapOpenApi();
 app.MapHub<GameHub>("/gamehub");
-app.UseCors("AllowFrontend");
-app.UseHttpsRedirection();
+
 app.Run();

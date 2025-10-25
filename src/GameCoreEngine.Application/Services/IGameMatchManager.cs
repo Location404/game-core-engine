@@ -11,4 +11,5 @@ public interface IGameMatchManager
     Task RemoveMatchAsync(Guid matchId);
     Task<bool> IsPlayerInMatchAsync(Guid playerId);
     Task<IEnumerable<Guid>> GetAllActiveMatchIdsAsync();
+    Task ClearPlayerMatchStateAsync(Guid playerId);
 }

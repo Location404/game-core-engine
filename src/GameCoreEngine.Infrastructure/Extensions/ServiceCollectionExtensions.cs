@@ -8,7 +8,9 @@ using GameCoreEngine.Application.Services;
 using GameCoreEngine.Infrastructure.Cache;
 using GameCoreEngine.Infrastructure.Matchmaking;
 using GameCoreEngine.Infrastructure.Messaging;
+using GameCoreEngine.Infrastructure.ExternalServices;
 using GameCoreEngine.Infrastructure.HttpClients;
+using Microsoft.Extensions.Logging;
 
 public static class ServiceCollectionExtensions
 {
@@ -124,14 +126,24 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddHttpClients(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<GameDataClientSettings>(configuration.GetSection("GameDataClient"));
+        services.Configure<GeoDataServiceSettings>(configuration.GetSection("GeoDataService"));
 
         var gameDataSettings = configuration.GetSection("GameDataClient").Get<GameDataClientSettings>()
             ?? new GameDataClientSettings();
+
+        var geoDataSettings = configuration.GetSection("GeoDataService").Get<GeoDataServiceSettings>()
+            ?? new GeoDataServiceSettings();
 
         services.AddHttpClient<IGameDataClient, GameDataHttpClient>(client =>
         {
             client.BaseAddress = new Uri(gameDataSettings.BaseUrl);
             client.Timeout = TimeSpan.FromSeconds(gameDataSettings.TimeoutSeconds);
+        });
+
+        services.AddHttpClient<IGeoDataClient, GeoDataClient>(client =>
+        {
+            client.BaseAddress = new Uri(geoDataSettings.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(geoDataSettings.TimeoutSeconds);
         });
 
         return services;

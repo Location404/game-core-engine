@@ -85,4 +85,12 @@ public class InMemoryGameMatchManager : IGameMatchManager
     {
         return Task.FromResult<IEnumerable<Guid>>(_matches.Keys.ToList());
     }
+
+    public Task ClearPlayerMatchStateAsync(Guid playerId)
+    {
+        _logger.LogInformation("Clearing match state for player {PlayerId}", playerId);
+        _playerToMatch.TryRemove(playerId, out _);
+        _logger.LogInformation("Player {PlayerId} match state cleared", playerId);
+        return Task.CompletedTask;
+    }
 }

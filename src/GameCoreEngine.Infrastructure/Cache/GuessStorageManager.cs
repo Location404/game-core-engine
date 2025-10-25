@@ -3,6 +3,7 @@ namespace GameCoreEngine.Infrastructure.Cache;
 using GameCoreEngine.Application.Services;
 using GameCoreEngine.Domain.Entities;
 using StackExchange.Redis;
+using System.Globalization;
 
 public class GuessStorageManager : IGuessStorageManager
 {
@@ -16,7 +17,8 @@ public class GuessStorageManager : IGuessStorageManager
     public async Task StoreGuessAsync(Guid matchId, Guid roundId, Guid playerId, Coordinate guess)
     {
         var key = $"guess:{matchId}:{roundId}:{playerId}";
-        var value = $"{guess.X},{guess.Y}";
+        // Use InvariantCulture to ensure decimal point (.) instead of comma (,)
+        var value = $"{guess.X.ToString(CultureInfo.InvariantCulture)},{guess.Y.ToString(CultureInfo.InvariantCulture)}";
         await _db.StringSetAsync(key, value, TimeSpan.FromMinutes(5));
     }
 
@@ -32,13 +34,21 @@ public class GuessStorageManager : IGuessStorageManager
         if (guessA.HasValue)
         {
             var parts = guessA.ToString().Split(',');
-            coordA = new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
+            // Use InvariantCulture for parsing to match serialization
+            coordA = new Coordinate(
+                double.Parse(parts[0], CultureInfo.InvariantCulture),
+                double.Parse(parts[1], CultureInfo.InvariantCulture)
+            );
         }
 
         if (guessB.HasValue)
         {
             var parts = guessB.ToString().Split(',');
-            coordB = new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
+            // Use InvariantCulture for parsing to match serialization
+            coordB = new Coordinate(
+                double.Parse(parts[0], CultureInfo.InvariantCulture),
+                double.Parse(parts[1], CultureInfo.InvariantCulture)
+            );
         }
 
         return (coordA, coordB);
@@ -64,7 +74,8 @@ public class GuessStorageManager : IGuessStorageManager
     public async Task StoreCorrectAnswerAsync(Guid matchId, Guid roundId, Coordinate correctAnswer)
     {
         var key = $"answer:{matchId}:{roundId}";
-        var value = $"{correctAnswer.X},{correctAnswer.Y}";
+        // Use InvariantCulture to ensure decimal point (.) instead of comma (,)
+        var value = $"{correctAnswer.X.ToString(CultureInfo.InvariantCulture)},{correctAnswer.Y.ToString(CultureInfo.InvariantCulture)}";
         await _db.StringSetAsync(key, value, TimeSpan.FromMinutes(5));
     }
 
@@ -77,6 +88,10 @@ public class GuessStorageManager : IGuessStorageManager
             return null;
 
         var parts = answer.ToString().Split(',');
-        return new Coordinate(double.Parse(parts[0]), double.Parse(parts[1]));
+        // Use InvariantCulture for parsing to match serialization
+        return new Coordinate(
+            double.Parse(parts[0], CultureInfo.InvariantCulture),
+            double.Parse(parts[1], CultureInfo.InvariantCulture)
+        );
     }
 }

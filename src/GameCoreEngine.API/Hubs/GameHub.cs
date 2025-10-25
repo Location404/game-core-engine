@@ -12,6 +12,7 @@ public class GameHub(
     IGameEventPublisher eventPublisher,
     IGuessStorageManager guessStorage,
     IPlayerConnectionManager connectionManager,
+    IGeoDataClient geoDataClient,
     ILogger<GameHub> logger) : Hub
 {
     private readonly IGameMatchManager _matchManager = matchManager;
@@ -19,6 +20,7 @@ public class GameHub(
     private readonly IGameEventPublisher _eventPublisher = eventPublisher;
     private readonly IGuessStorageManager _guessStorage = guessStorage;
     private readonly IPlayerConnectionManager _connectionManager = connectionManager;
+    private readonly IGeoDataClient _geoDataClient = geoDataClient;
     private readonly ILogger<GameHub> _logger = logger;
 
     public async Task<string> JoinMatchmaking(JoinMatchmakingRequest request)
@@ -34,12 +36,43 @@ public class GameHub(
             var isInMatch = await _matchManager.IsPlayerInMatchAsync(request.PlayerId);
             if (isInMatch)
             {
-                _logger.LogWarning("Player {PlayerId} is already in an active match", request.PlayerId);
-                return "You are already in an active match.";
+                _logger.LogWarning("Player {PlayerId} is already in an active match. Force cleaning up to allow new matchmaking...", request.PlayerId);
+
+                var existingMatch = await _matchManager.GetPlayerCurrentMatchAsync(request.PlayerId);
+                if (existingMatch != null)
+                {
+                    var isMatchEnded = existingMatch.EndTime != default(DateTime);
+                    var roundCount = existingMatch.GameRounds?.Count ?? 0;
+
+                    _logger.LogInformation("Match {MatchId} status - Ended: {Ended}, Rounds: {Rounds}/3",
+                        existingMatch.Id, isMatchEnded, roundCount);
+
+                    // If match is not ended, finalize it as interrupted
+                    if (!isMatchEnded)
+                    {
+                        _logger.LogWarning("Match {MatchId} was not properly ended. Finalizing as interrupted...", existingMatch.Id);
+                        existingMatch.EndGameMatch();
+                        await _matchManager.UpdateMatchAsync(existingMatch);
+                        _logger.LogInformation("Match {MatchId} finalized as interrupted", existingMatch.Id);
+                    }
+
+                    // Always remove the match to free the player
+                    _logger.LogWarning("Removing match {MatchId} to allow player {PlayerId} to join new matchmaking", existingMatch.Id, request.PlayerId);
+                    await _matchManager.RemoveMatchAsync(existingMatch.Id);
+                    _logger.LogInformation("Player {PlayerId} freed from previous match. Continuing to matchmaking...", request.PlayerId);
+                }
+                else
+                {
+                    // Player marked as in match but match doesn't exist - clear stale state
+                    _logger.LogWarning("Player {PlayerId} in match but match not found. Clearing stale state...", request.PlayerId);
+                    await _matchManager.ClearPlayerMatchStateAsync(request.PlayerId);
+                }
             }
 
+            _logger.LogInformation("Player {PlayerId} passed all checks. Calling JoinQueueAsync...", request.PlayerId);
             await _matchmaking.JoinQueueAsync(request.PlayerId);
 
+            _logger.LogInformation("Player {PlayerId} joined queue. Calling TryFindMatchAsync...", request.PlayerId);
             var match = await _matchmaking.TryFindMatchAsync();
 
             if (match != null)
@@ -131,8 +164,28 @@ public class GameHub(
             match.StartNewGameRound();
             await _matchManager.UpdateMatchAsync(match);
 
-            // Generate random location for this round
-            var location = GenerateRandomLocation();
+            // Fetch random location from geo-data-service API
+            var locationDto = await _geoDataClient.GetRandomLocationAsync();
+
+            LocationData location;
+            if (locationDto != null)
+            {
+                // Use location from API
+                location = new LocationData(
+                    locationDto.Coordinate.X,
+                    locationDto.Coordinate.Y,
+                    locationDto.Heading ?? new Random().Next(0, 360),
+                    locationDto.Pitch ?? new Random().Next(-10, 10)
+                );
+
+                _logger.LogInformation("Using location from geo-data-service: {Name}", locationDto.Name);
+            }
+            else
+            {
+                // Fallback to hardcoded location if API fails
+                _logger.LogWarning("geo-data-service unavailable, using fallback hardcoded location");
+                location = GenerateRandomLocation();
+            }
 
             // Store the correct answer for later use
             await _guessStorage.StoreCorrectAnswerAsync(
@@ -190,6 +243,10 @@ public class GameHub(
 
             // Store the guess
             var guess = request.ToCoordinate();
+
+            _logger.LogInformation("📥 [GameHub] Palpite recebido de {PlayerId}: X={X} (Lat), Y={Y} (Lng)",
+                request.PlayerId, request.X, request.Y);
+
             await _guessStorage.StoreGuessAsync(
                 request.MatchId,
                 currentRoundId,
@@ -197,7 +254,7 @@ public class GameHub(
                 guess
             );
 
-            _logger.LogInformation("Guess stored for player {PlayerId} at ({X}, {Y})",
+            _logger.LogInformation("✅ [GameHub] Palpite armazenado para player {PlayerId} em ({X}, {Y})",
                 request.PlayerId, request.X, request.Y);
 
             await Clients.Caller.SendAsync("GuessSubmitted", "Guess submitted successfully.");
@@ -212,8 +269,12 @@ public class GameHub(
 
             if (playerAGuess != null && playerBGuess != null)
             {
-                _logger.LogInformation("Both players have submitted guesses for match {MatchId}. Ending round automatically.",
+                _logger.LogInformation("✅ [GameHub] Ambos jogadores enviaram palpites para match {MatchId}. Finalizando rodada...",
                     request.MatchId);
+                _logger.LogInformation("📍 [GameHub] PlayerA Guess: X={PlayerAX} (Lat), Y={PlayerAY} (Lng)",
+                    playerAGuess.X, playerAGuess.Y);
+                _logger.LogInformation("📍 [GameHub] PlayerB Guess: X={PlayerBX} (Lat), Y={PlayerBY} (Lng)",
+                    playerBGuess.X, playerBGuess.Y);
 
                 // Re-fetch match to ensure we have the latest state (prevent race condition)
                 match = await _matchManager.GetMatchAsync(request.MatchId);
@@ -240,15 +301,25 @@ public class GameHub(
 
                 if (gameResponse == null)
                 {
-                    _logger.LogError("Correct answer not found for match {MatchId}, round {RoundId}",
+                    _logger.LogError("❌ [GameHub] Resposta correta não encontrada para match {MatchId}, round {RoundId}",
                         request.MatchId, currentRoundId);
                     await Clients.Caller.SendAsync("Error", "Round data corrupted. Please restart the match.");
                     return;
                 }
 
+                _logger.LogInformation("🎯 [GameHub] Resposta Correta: X={CorrectX} (Lat), Y={CorrectY} (Lng)",
+                    gameResponse.X, gameResponse.Y);
+
                 // End the round automatically
                 match.EndCurrentGameRound(gameResponse, playerAGuess, playerBGuess);
                 await _matchManager.UpdateMatchAsync(match);
+
+                var lastRound = match.GameRounds?.Last();
+                if (lastRound != null)
+                {
+                    _logger.LogInformation("🏆 [GameHub] Rodada finalizada - PlayerA: {PlayerAPoints} pts, PlayerB: {PlayerBPoints} pts",
+                        lastRound.PlayerAPoints, lastRound.PlayerBPoints);
+                }
 
                 // Clear stored guesses (use saved roundId)
                 await _guessStorage.ClearGuessesAsync(request.MatchId, currentRoundId);
@@ -293,17 +364,38 @@ public class GameHub(
                     _logger.LogInformation("Match {MatchId} ended. Winner: {WinnerId}",
                         request.MatchId, match.PlayerWinnerId);
 
+                    var matchEvent = GameMatchEndedEvent.FromGameMatch(match);
+
                     try
                     {
-                        var matchEvent = GameMatchEndedEvent.FromGameMatch(match);
                         await _eventPublisher.PublishMatchEndedAsync(matchEvent);
+                        _logger.LogInformation("Match ended event published to RabbitMQ for match {MatchId}", request.MatchId);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to publish MatchEnded event for match {MatchId}. Match data may not be persisted.", request.MatchId);
+                        _logger.LogWarning(ex, "Failed to publish MatchEnded event to RabbitMQ for match {MatchId}. Trying HTTP fallback...", request.MatchId);
+
+                        // HTTP fallback - fire and forget
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                var success = await _geoDataClient.SendMatchEndedAsync(matchEvent);
+                                if (!success)
+                                {
+                                    _logger.LogError("HTTP fallback also failed for match {MatchId}. Match data may not be persisted!", request.MatchId);
+                                }
+                            }
+                            catch (Exception httpEx)
+                            {
+                                _logger.LogError(httpEx, "HTTP fallback threw exception for match {MatchId}", request.MatchId);
+                            }
+                        });
                     }
 
+                    _logger.LogInformation("Removing match {MatchId} from cache...", match.Id);
                     await _matchManager.RemoveMatchAsync(match.Id);
+                    _logger.LogInformation("Match {MatchId} removed successfully from cache", match.Id);
                 }
             }
         }

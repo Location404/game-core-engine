@@ -33,7 +33,8 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
             WriteIndented = false
         };
 
-        EnsureConnection();
+        // Don't connect in constructor - lazy connection on first publish
+        _logger.LogInformation("RabbitMQEventPublisher initialized. Connection will be established on first event publish.");
     }
 
     private void EnsureConnection()
@@ -62,6 +63,9 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
                     RequestedHeartbeat = TimeSpan.FromSeconds(60),
                     RequestedConnectionTimeout = TimeSpan.FromSeconds(30)
                 };
+
+                // Disable SSL for non-SSL RabbitMQ server
+                factory.Ssl.Enabled = false;
 
                 _connection = factory.CreateConnection();
                 _channel = _connection.CreateModel();
