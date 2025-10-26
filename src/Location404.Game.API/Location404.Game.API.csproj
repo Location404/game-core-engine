@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.9" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="Location404.Shared.Observability" Version="0.0.4"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Location404.Game.Infrastructure\Location404.Game.Infrastructure.csproj" />
+    <ProjectReference Include="..\Location404.Game.Application\Location404.Game.Application.csproj" />
+    <ProjectReference Include="..\Location404.Game.Domain\Location404.Game.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
