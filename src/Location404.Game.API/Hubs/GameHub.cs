@@ -29,7 +29,6 @@ public class GameHub(
         {
             _logger.LogInformation("Player {PlayerId} joining matchmaking queue", request.PlayerId);
 
-            // Map player to connection ID when joining matchmaking
             await _connectionManager.MapPlayerToConnectionAsync(request.PlayerId, Context.ConnectionId);
             _logger.LogInformation("Mapped Player {PlayerId} to ConnectionId {ConnectionId}", request.PlayerId, Context.ConnectionId);
 
@@ -47,7 +46,6 @@ public class GameHub(
                     _logger.LogInformation("Match {MatchId} status - Ended: {Ended}, Rounds: {Rounds}/3",
                         existingMatch.Id, isMatchEnded, roundCount);
 
-                    // If match is not ended, finalize it as interrupted
                     if (!isMatchEnded)
                     {
                         _logger.LogWarning("Match {MatchId} was not properly ended. Finalizing as interrupted...", existingMatch.Id);
@@ -56,14 +54,12 @@ public class GameHub(
                         _logger.LogInformation("Match {MatchId} finalized as interrupted", existingMatch.Id);
                     }
 
-                    // Always remove the match to free the player
                     _logger.LogWarning("Removing match {MatchId} to allow player {PlayerId} to join new matchmaking", existingMatch.Id, request.PlayerId);
                     await _matchManager.RemoveMatchAsync(existingMatch.Id);
                     _logger.LogInformation("Player {PlayerId} freed from previous match. Continuing to matchmaking...", request.PlayerId);
                 }
                 else
                 {
-                    // Player marked as in match but match doesn't exist - clear stale state
                     _logger.LogWarning("Player {PlayerId} in match but match not found. Clearing stale state...", request.PlayerId);
                     await _matchManager.ClearPlayerMatchStateAsync(request.PlayerId);
                 }
@@ -80,11 +76,9 @@ public class GameHub(
                 _logger.LogInformation("Match {MatchId} created for players {PlayerA} and {PlayerB}",
                     match.Id, match.PlayerAId, match.PlayerBId);
 
-                // Get connection IDs for both players
                 var playerAConnectionId = await _connectionManager.GetConnectionIdAsync(match.PlayerAId);
                 var playerBConnectionId = await _connectionManager.GetConnectionIdAsync(match.PlayerBId);
 
-                // Add both players to the match group
                 if (playerAConnectionId != null)
                 {
                     await Groups.AddToGroupAsync(playerAConnectionId, match.Id.ToString());
@@ -112,7 +106,6 @@ public class GameHub(
                     match.StartTime
                 );
 
-                // Send MatchFound event to both players
                 await Clients.Group(match.Id.ToString())
                     .SendAsync("MatchFound", response);
 
@@ -164,13 +157,11 @@ public class GameHub(
             match.StartNewGameRound();
             await _matchManager.UpdateMatchAsync(match);
 
-            // Fetch random location from geo-data-service API
             var locationDto = await _geoDataClient.GetRandomLocationAsync();
 
             LocationData location;
             if (locationDto != null)
             {
-                // Use location from API
                 location = new LocationData(
                     locationDto.Coordinate.X,
                     locationDto.Coordinate.Y,
@@ -182,12 +173,10 @@ public class GameHub(
             }
             else
             {
-                // Fallback to hardcoded location if API fails
                 _logger.LogWarning("geo-data-service unavailable, using fallback hardcoded location");
                 location = GenerateRandomLocation();
             }
 
-            // Store the correct answer for later use
             await _guessStorage.StoreCorrectAnswerAsync(
                 match.Id,
                 match.CurrentGameRound!.Id,
@@ -241,7 +230,6 @@ public class GameHub(
             // Save the roundId before any operations that might modify CurrentGameRound
             var currentRoundId = match.CurrentGameRound.Id;
 
-            // Store the guess
             var guess = request.ToCoordinate();
 
             _logger.LogInformation("📥 [GameHub] Palpite recebido de {PlayerId}: X={X} (Lat), Y={Y} (Lng)",
@@ -259,7 +247,6 @@ public class GameHub(
 
             await Clients.Caller.SendAsync("GuessSubmitted", "Guess submitted successfully.");
 
-            // Check if both players have submitted their guesses
             var (playerAGuess, playerBGuess) = await _guessStorage.GetBothGuessesAsync(
                 request.MatchId,
                 currentRoundId,
@@ -293,7 +280,6 @@ public class GameHub(
                     return;
                 }
 
-                // Get the correct answer that was stored when the round started
                 var gameResponse = await _guessStorage.GetCorrectAnswerAsync(
                     request.MatchId,
                     currentRoundId
@@ -310,7 +296,6 @@ public class GameHub(
                 _logger.LogInformation("🎯 [GameHub] Resposta Correta: X={CorrectX} (Lat), Y={CorrectY} (Lng)",
                     gameResponse.X, gameResponse.Y);
 
-                // End the round automatically
                 match.EndCurrentGameRound(gameResponse, playerAGuess, playerBGuess);
                 await _matchManager.UpdateMatchAsync(match);
 
@@ -321,7 +306,6 @@ public class GameHub(
                         lastRound.PlayerAPoints, lastRound.PlayerBPoints);
                 }
 
-                // Clear stored guesses (use saved roundId)
                 await _guessStorage.ClearGuessesAsync(request.MatchId, currentRoundId);
 
                 if (match.GameRounds == null || !match.GameRounds.Any())
@@ -348,7 +332,6 @@ public class GameHub(
                     _logger.LogError(ex, "Failed to publish RoundEnded event for match {MatchId}. Continuing anyway.", request.MatchId);
                 }
 
-                // Check if match is complete
                 if (!match.CanStartNewRound())
                 {
                     _logger.LogInformation("Match {MatchId} is complete. Ending match.", request.MatchId);
@@ -375,7 +358,6 @@ public class GameHub(
                     {
                         _logger.LogWarning(ex, "Failed to publish MatchEnded event to RabbitMQ for match {MatchId}. Trying HTTP fallback...", request.MatchId);
 
-                        // HTTP fallback - fire and forget
                         _ = Task.Run(async () =>
                         {
                             try
@@ -514,7 +496,6 @@ public class GameHub(
 
         if (playerId != Guid.Empty)
         {
-            // Map player to connection ID
             await _connectionManager.MapPlayerToConnectionAsync(playerId, Context.ConnectionId);
             _logger.LogInformation("Player {PlayerId} connected with ConnectionId {ConnectionId}", playerId, Context.ConnectionId);
 
@@ -536,10 +517,7 @@ public class GameHub(
 
         if (playerId != Guid.Empty)
         {
-            // Remove player from matchmaking queue
             await _matchmaking.LeaveQueueAsync(playerId);
-
-            // Remove player connection mapping
             await _connectionManager.RemoveMappingAsync(playerId);
             _logger.LogInformation("Player {PlayerId} disconnected and removed from connection mapping", playerId);
         }
@@ -562,8 +540,6 @@ public class GameHub(
 
     private LocationData GenerateRandomLocation()
     {
-        // Famous locations with good Street View coverage
-        // Distributed across all continents for variety
         var locations = new[]
         {
             // South America - Brazil
@@ -649,7 +625,6 @@ public class GameHub(
             new { X = -41.2865, Y = 174.7762, Name = "Wellington, New Zealand" },
         };
 
-        // Use static Random to avoid seed collision
         var location = locations[_random.Next(locations.Length)];
         var heading = _random.Next(0, 360);
         var pitch = _random.Next(-10, 10);
