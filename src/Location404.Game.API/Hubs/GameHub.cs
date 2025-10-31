@@ -1,10 +1,12 @@
 namespace Location404.Game.API.Hubs;
 
+using System.Diagnostics;
 using Microsoft.AspNetCore.SignalR;
 using Location404.Game.Application.Services;
 using Location404.Game.Application.DTOs.Requests;
 using Location404.Game.Application.DTOs.Responses;
 using Location404.Game.Application.Events;
+using Shared.Observability.Core;
 
 public class GameHub(
     IGameMatchManager matchManager,
@@ -13,6 +15,8 @@ public class GameHub(
     IGuessStorageManager guessStorage,
     IPlayerConnectionManager connectionManager,
     IGeoDataClient geoDataClient,
+    ActivitySource activitySource,
+    ObservabilityMetrics metrics,
     ILogger<GameHub> logger) : Hub
 {
     private readonly IGameMatchManager _matchManager = matchManager;
@@ -21,10 +25,18 @@ public class GameHub(
     private readonly IGuessStorageManager _guessStorage = guessStorage;
     private readonly IPlayerConnectionManager _connectionManager = connectionManager;
     private readonly IGeoDataClient _geoDataClient = geoDataClient;
+    private readonly ActivitySource _activitySource = activitySource;
+    private readonly ObservabilityMetrics _metrics = metrics;
     private readonly ILogger<GameHub> _logger = logger;
 
     public async Task<string> JoinMatchmaking(JoinMatchmakingRequest request)
     {
+        using var activity = _activitySource.StartActivity("JoinMatchmaking", ActivityKind.Server);
+        activity?.SetTag("game.player_id", request.PlayerId.ToString());
+        activity?.SetTag("signalr.method", "JoinMatchmaking");
+
+        var stopwatch = Stopwatch.StartNew();
+
         try
         {
             _logger.LogInformation("Player {PlayerId} joining matchmaking queue", request.PlayerId);
@@ -113,11 +125,24 @@ public class GameHub(
             }
 
             _logger.LogInformation("Player {PlayerId} added to matchmaking queue", request.PlayerId);
+
+            stopwatch.Stop();
+            _metrics.RecordRequestDuration(stopwatch.Elapsed.TotalSeconds, "SignalR", "JoinMatchmaking");
+            _metrics.IncrementRequests("SignalR", "JoinMatchmaking", 200);
+            activity?.SetStatus(ActivityStatusCode.Ok);
+
             return "Added to queue. Waiting for opponent...";
         }
         catch (Exception ex)
         {
+            stopwatch.Stop();
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            activity?.SetTag("exception.type", ex.GetType().FullName);
+            activity?.SetTag("exception.message", ex.Message);
+
+            _metrics.IncrementErrors(ex.GetType().Name, "JoinMatchmaking");
             _logger.LogError(ex, "Error in JoinMatchmaking for player {PlayerId}", request.PlayerId);
+
             return $"Error: {ex.Message}";
         }
     }
