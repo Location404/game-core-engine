@@ -1,6 +1,5 @@
 using Location404.Game.API.Hubs;
 using Location404.Game.Infrastructure.Extensions;
-
 using Shared.Observability.Core;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,7 +20,6 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-                
                 ?? ["http://localhost:4200"]
             )
             .AllowAnyHeader()
@@ -43,5 +41,6 @@ if (!app.Environment.IsDevelopment())
 
 app.MapOpenApi();
 app.MapHub<GameHub>("/gamehub");
+app.MapObservabilityHealthChecks();
 
 app.Run();
