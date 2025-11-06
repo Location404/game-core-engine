@@ -16,9 +16,9 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
     private readonly RabbitMQSettings _settings;
     private readonly ILogger<RabbitMQEventPublisher> _logger;
     private IConnection? _connection;
-    private IModel? _channel;
+    private IChannel? _channel;
     private readonly JsonSerializerOptions _jsonOptions;
-    private readonly object _lock = new();
+    private readonly SemaphoreSlim _lock = new(1, 1);
     private bool _isDisposed;
 
     public RabbitMQEventPublisher(IOptions<RabbitMQSettings> options, ILogger<RabbitMQEventPublisher> logger)
@@ -33,65 +33,64 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
             WriteIndented = false
         };
 
-        // Don't connect in constructor - lazy connection on first publish
         _logger.LogInformation("RabbitMQEventPublisher initialized. Connection will be established on first event publish.");
     }
 
-    private void EnsureConnection()
+    private async Task EnsureConnectionAsync(CancellationToken cancellationToken = default)
     {
         if (_connection?.IsOpen == true && _channel?.IsOpen == true)
             return;
 
-        lock (_lock)
+        await _lock.WaitAsync(cancellationToken);
+        try
         {
             if (_connection?.IsOpen == true && _channel?.IsOpen == true)
                 return;
 
-            try
+            _logger.LogInformation("Connecting to RabbitMQ at {HostName}:{Port}", _settings.HostName, _settings.Port);
+
+            var factory = new ConnectionFactory
             {
-                _logger.LogInformation("Connecting to RabbitMQ at {HostName}:{Port}", _settings.HostName, _settings.Port);
+                HostName = _settings.HostName,
+                Port = _settings.Port,
+                UserName = _settings.UserName,
+                Password = _settings.Password,
+                VirtualHost = _settings.VirtualHost,
+                AutomaticRecoveryEnabled = true,
+                NetworkRecoveryInterval = TimeSpan.FromSeconds(10),
+                RequestedHeartbeat = TimeSpan.FromSeconds(60)
+            };
 
-                var factory = new ConnectionFactory
-                {
-                    HostName = _settings.HostName,
-                    Port = _settings.Port,
-                    UserName = _settings.UserName,
-                    Password = _settings.Password,
-                    VirtualHost = _settings.VirtualHost,
-                    AutomaticRecoveryEnabled = true,
-                    NetworkRecoveryInterval = TimeSpan.FromSeconds(10),
-                    RequestedHeartbeat = TimeSpan.FromSeconds(60),
-                    RequestedConnectionTimeout = TimeSpan.FromSeconds(30)
-                };
+            factory.Ssl.Enabled = false;
 
-                // Disable SSL for non-SSL RabbitMQ server
-                factory.Ssl.Enabled = false;
+            _connection = await factory.CreateConnectionAsync(cancellationToken);
+            _channel = await _connection.CreateChannelAsync(cancellationToken: cancellationToken);
 
-                _connection = factory.CreateConnection();
-                _channel = _connection.CreateModel();
+            await _channel.ExchangeDeclareAsync(
+                exchange: _settings.ExchangeName,
+                type: ExchangeType.Topic,
+                durable: true,
+                autoDelete: false,
+                cancellationToken: cancellationToken
+            );
 
-                _channel.ExchangeDeclare(
-                    exchange: _settings.ExchangeName,
-                    type: ExchangeType.Topic,
-                    durable: true,
-                    autoDelete: false
-                );
-
-                _logger.LogInformation("Successfully connected to RabbitMQ");
-            }
-            catch (BrokerUnreachableException ex)
-            {
-                _logger.LogError(ex, "RabbitMQ broker is unreachable at {HostName}:{Port}. Check if RabbitMQ is running and accessible.",
-                    _settings.HostName, _settings.Port);
-                throw new InvalidOperationException($"Cannot connect to RabbitMQ at {_settings.HostName}:{_settings.Port}. Ensure RabbitMQ is running.", ex);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to establish RabbitMQ connection");
-                throw;
-            }
+            _logger.LogInformation("Successfully connected to RabbitMQ");
         }
-
+        catch (BrokerUnreachableException ex)
+        {
+            _logger.LogError(ex, "RabbitMQ broker is unreachable at {HostName}:{Port}. Check if RabbitMQ is running and accessible.",
+                _settings.HostName, _settings.Port);
+            throw new InvalidOperationException($"Cannot connect to RabbitMQ at {_settings.HostName}:{_settings.Port}. Ensure RabbitMQ is running.", ex);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to establish RabbitMQ connection");
+            throw;
+        }
+        finally
+        {
+            _lock.Release();
+        }
     }
 
     public Task PublishMatchEndedAsync(GameMatchEndedEvent @event)
@@ -104,7 +103,7 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
         return PublishEventAsync("round.ended", @event);
     }
 
-    private Task PublishEventAsync<T>(string routingKey, T @event)
+    private async Task PublishEventAsync<T>(string routingKey, T @event)
     {
         ObjectDisposedException.ThrowIf(_isDisposed, this);
 
@@ -115,7 +114,7 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
         {
             try
             {
-                EnsureConnection();
+                await EnsureConnectionAsync();
 
                 if (_channel == null || !_channel.IsOpen)
                 {
@@ -125,15 +124,18 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
                 var json = JsonSerializer.Serialize(@event, _jsonOptions);
                 var body = Encoding.UTF8.GetBytes(json);
 
-                var properties = _channel.CreateBasicProperties();
-                properties.Persistent = true;
-                properties.ContentType = "application/json";
-                properties.Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
-                properties.MessageId = Guid.NewGuid().ToString();
+                var properties = new BasicProperties
+                {
+                    Persistent = true,
+                    ContentType = "application/json",
+                    Timestamp = new AmqpTimestamp(DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
+                    MessageId = Guid.NewGuid().ToString()
+                };
 
-                _channel.BasicPublish(
+                await _channel.BasicPublishAsync(
                     exchange: _settings.ExchangeName,
                     routingKey: routingKey,
+                    mandatory: false,
                     basicProperties: properties,
                     body: body
                 );
@@ -141,7 +143,7 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
                 _logger.LogInformation("Event published to RabbitMQ: {RoutingKey}, MessageId: {MessageId}",
                     routingKey, properties.MessageId);
 
-                return Task.CompletedTask;
+                return;
             }
             catch (AlreadyClosedException ex)
             {
@@ -154,8 +156,8 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
                     throw new InvalidOperationException($"Failed to publish event to RabbitMQ after {maxRetries} retries", ex);
                 }
 
-                Thread.Sleep(TimeSpan.FromSeconds(retryCount * 2));
-                EnsureConnection();
+                await Task.Delay(TimeSpan.FromSeconds(retryCount * 2));
+                await EnsureConnectionAsync();
             }
             catch (BrokerUnreachableException ex)
             {
@@ -177,37 +179,28 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
         if (_isDisposed)
             return;
 
-        lock (_lock)
+        _lock.Wait();
+        try
         {
             if (_isDisposed)
                 return;
 
-            try
-            {
-                _logger.LogInformation("Disposing RabbitMQ connection");
+            _logger.LogInformation("Disposing RabbitMQ connection");
 
-                if (_channel?.IsOpen == true)
-                {
-                    _channel.Close();
-                }
-                _channel?.Dispose();
+            _channel?.Dispose();
+            _connection?.Dispose();
 
-                if (_connection?.IsOpen == true)
-                {
-                    _connection.Close();
-                }
-                _connection?.Dispose();
-
-                _logger.LogInformation("RabbitMQ connection disposed successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error disposing RabbitMQ connection");
-            }
-            finally
-            {
-                _isDisposed = true;
-            }
+            _logger.LogInformation("RabbitMQ connection disposed successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error disposing RabbitMQ connection");
+        }
+        finally
+        {
+            _isDisposed = true;
+            _lock.Release();
+            _lock.Dispose();
         }
 
         GC.SuppressFinalize(this);
