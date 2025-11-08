@@ -7,7 +7,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddSignalR();
+
+var redisConnection = builder.Configuration["Redis:ConnectionString"];
+builder.Services.AddSignalR()
+    .AddStackExchangeRedis(redisConnection, options =>
+    {
+        options.Configuration.ChannelPrefix = "SignalR";
+    });
 
 builder.Services.AddOpenTelemetryObservability(builder.Configuration, options =>
 {
