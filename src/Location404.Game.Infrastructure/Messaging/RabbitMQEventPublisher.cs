@@ -156,7 +156,7 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
                     throw new InvalidOperationException($"Failed to publish event to RabbitMQ after {maxRetries} retries", ex);
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(retryCount * 2));
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)));
                 await EnsureConnectionAsync();
             }
             catch (BrokerUnreachableException ex)
