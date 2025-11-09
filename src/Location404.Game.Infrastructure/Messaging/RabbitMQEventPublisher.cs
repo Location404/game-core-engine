@@ -161,8 +161,17 @@ public class RabbitMQEventPublisher : IGameEventPublisher, IDisposable
             }
             catch (BrokerUnreachableException ex)
             {
-                _logger.LogError(ex, "RabbitMQ broker is unreachable. Event will be lost: {RoutingKey}", routingKey);
-                throw new InvalidOperationException($"Cannot publish event - RabbitMQ is unreachable at {_settings.HostName}:{_settings.Port}", ex);
+                retryCount++;
+                _logger.LogWarning(ex, "RabbitMQ broker is unreachable. Retry {RetryCount}/{MaxRetries}", retryCount, maxRetries);
+
+                if (retryCount >= maxRetries)
+                {
+                    _logger.LogError(ex, "Failed to publish event after {MaxRetries} retries - broker unreachable", maxRetries);
+                    throw new InvalidOperationException($"Cannot publish event - RabbitMQ is unreachable at {_settings.HostName}:{_settings.Port}", ex);
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryCount)));
+                await EnsureConnectionAsync();
             }
             catch (Exception ex)
             {
