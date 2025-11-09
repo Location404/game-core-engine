@@ -158,7 +158,13 @@ public static class ServiceCollectionExtensions
         return HttpPolicyExtensions
             .HandleTransientHttpError()
             .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound)
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+            .WaitAndRetryAsync(3, retryAttempt =>
+            {
+                var baseDelay = TimeSpan.FromSeconds(Math.Pow(2, retryAttempt));
+                var jitter = Random.Shared.NextDouble() * 0.4 - 0.2;
+                var jitterMs = baseDelay.TotalMilliseconds * jitter;
+                return baseDelay + TimeSpan.FromMilliseconds(jitterMs);
+            });
     }
 
     private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
