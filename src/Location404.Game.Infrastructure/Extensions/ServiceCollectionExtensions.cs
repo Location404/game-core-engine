@@ -11,6 +11,8 @@ using Location404.Game.Infrastructure.Messaging;
 using Location404.Game.Infrastructure.ExternalServices;
 using Location404.Game.Infrastructure.HttpClients;
 using Microsoft.Extensions.Logging;
+using Polly;
+using Polly.Extensions.Http;
 
 public static class ServiceCollectionExtensions
 {
@@ -144,8 +146,25 @@ public static class ServiceCollectionExtensions
         {
             client.BaseAddress = new Uri(geoDataSettings.BaseUrl);
             client.Timeout = TimeSpan.FromSeconds(geoDataSettings.TimeoutSeconds);
-        });
+        })
+        .AddPolicyHandler(GetRetryPolicy())
+        .AddPolicyHandler(GetCircuitBreakerPolicy());
 
         return services;
+    }
+
+    private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.NotFound)
+            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
+    }
+
+    private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30));
     }
 }
