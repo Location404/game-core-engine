@@ -25,7 +25,7 @@ builder.Services.AddObservabilityHealthChecks(builder.Configuration, checks =>
     var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
     if (!string.IsNullOrEmpty(redisConnectionString))
     {
-        checks.AddRedis(redisConnectionString, name: "redis", tags: new[] { "ready", "db" });
+        checks.AddRedis(redisConnectionString, name: "redis", tags: new[] { "ready", "db" }, timeout: TimeSpan.FromSeconds(3));
     }
 
     var rabbitMqSettings = builder.Configuration.GetSection("RabbitMQ");
@@ -43,7 +43,7 @@ builder.Services.AddObservabilityHealthChecks(builder.Configuration, checks =>
             var factory = new RabbitMQ.Client.ConnectionFactory();
             factory.Uri = new Uri(connectionString);
             return factory.CreateConnectionAsync().GetAwaiter().GetResult();
-        }, name: "rabbitmq", tags: new[] { "ready", "messaging" });
+        }, name: "rabbitmq", tags: new[] { "ready", "messaging" }, timeout: TimeSpan.FromSeconds(3));
     }
 });
 
