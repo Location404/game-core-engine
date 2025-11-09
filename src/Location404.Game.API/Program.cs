@@ -20,6 +20,33 @@ builder.Services.AddOpenTelemetryObservability(builder.Configuration, options =>
     options.Environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
 });
 
+builder.Services.AddObservabilityHealthChecks(builder.Configuration, checks =>
+{
+    var redisConnectionString = builder.Configuration["Redis:ConnectionString"];
+    if (!string.IsNullOrEmpty(redisConnectionString))
+    {
+        checks.AddRedis(redisConnectionString, name: "redis", tags: new[] { "ready", "db" });
+    }
+
+    var rabbitMqSettings = builder.Configuration.GetSection("RabbitMQ");
+    var rabbitHost = rabbitMqSettings["HostName"];
+    var rabbitPort = rabbitMqSettings.GetValue<int>("Port");
+    var rabbitUser = rabbitMqSettings["UserName"];
+    var rabbitPass = rabbitMqSettings["Password"];
+    var rabbitVHost = rabbitMqSettings["VirtualHost"];
+
+    if (!string.IsNullOrEmpty(rabbitHost))
+    {
+        var connectionString = $"amqp://{rabbitUser}:{rabbitPass}@{rabbitHost}:{rabbitPort}/{rabbitVHost}";
+        checks.AddRabbitMQ(sp =>
+        {
+            var factory = new RabbitMQ.Client.ConnectionFactory();
+            factory.Uri = new Uri(connectionString);
+            return factory.CreateConnectionAsync().GetAwaiter().GetResult();
+        }, name: "rabbitmq", tags: new[] { "ready", "messaging" });
+    }
+});
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
