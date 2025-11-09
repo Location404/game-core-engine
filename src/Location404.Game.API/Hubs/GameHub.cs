@@ -1,6 +1,8 @@
 namespace Location404.Game.API.Hubs;
 
 using System.Diagnostics;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Location404.Game.Application.Services;
 using Location404.Game.Application.DTOs.Requests;
@@ -8,6 +10,7 @@ using Location404.Game.Application.DTOs.Responses;
 using Location404.Game.Application.Events;
 using Shared.Observability.Core;
 
+[Authorize]
 public class GameHub(
     IGameMatchManager matchManager,
     IMatchmakingService matchmaking,
@@ -552,7 +555,9 @@ public class GameHub(
 
     private Guid GetPlayerIdFromContext()
     {
-        var playerIdClaim = Context.User?.FindFirst("PlayerId")?.Value;
+        var playerIdClaim = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? Context.User?.FindFirst("sub")?.Value
+            ?? Context.User?.FindFirst("PlayerId")?.Value;
 
         if (string.IsNullOrEmpty(playerIdClaim))
             return Guid.Empty;
